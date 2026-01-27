@@ -54,7 +54,7 @@ const Dashboard = () => {
                 if (histRes.data.length > 0) {
                     setHistory(histRes.data);
                     setCurrentData(latest);
-                    setLastUpdated(new Date(latest.timestamp).toLocaleTimeString());
+                    setLastUpdated(new Date(latest.timestamp).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" }));
                     setPreviousData(latest);
                 }
             } else {
@@ -148,7 +148,9 @@ const Dashboard = () => {
                     <span className="text-sm text-gray-500 flex flex-col items-end">
                         <span>Updated: {lastUpdated || 'Never'}</span>
                         {currentData?.data?.nseTimestamp && (
-                            <span className="text-xs text-blue-600 font-semibold">NSE: {currentData.data.nseTimestamp}</span>
+                            <span className="text-xs text-blue-600 font-semibold">
+                                NSE: {new Date(currentData.data.nseTimestamp).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}
+                            </span>
                         )}
                     </span>
 

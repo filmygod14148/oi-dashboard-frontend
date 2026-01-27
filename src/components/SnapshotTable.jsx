@@ -441,7 +441,7 @@ const SnapshotTable = ({ historyData, selectedDate, timeFilter, strikeCount }) =
                         <div className="bg-gray-50 px-4 py-2 border-b flex justify-between items-center">
                             <span className="font-bold text-gray-700">
                                 {timestamp}
-                                {snapshot.data?.nseTimestamp && <span className="text-xs font-normal text-blue-600 ml-2">(NSE: {snapshot.data.nseTimestamp})</span>}
+                                {snapshot.data?.nseTimestamp && <span className="text-xs font-normal text-blue-600 ml-2">(NSE: {new Date(snapshot.data.nseTimestamp).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })})</span>}
                             </span>
                             <span className="text-gray-500">Spot: <span className="font-mono text-black font-semibold">{spotPrice}</span></span>
                         </div>
