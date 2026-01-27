@@ -87,7 +87,7 @@ const SnapshotTable = ({ historyData, selectedDate, timeFilter, strikeCount }) =
 
         // Integrate over the filtered/displayed data to match user view
         historyToDisplay.forEach((snapshot, index) => {
-            const timestamp = new Date(snapshot.timestamp).toLocaleString();
+            const timestamp = new Date(snapshot.timestamp).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
             const nseTime = snapshot.data?.nseTimestamp || '';
             const spot = snapshot.data?.records?.underlyingValue || 0;
             const records = snapshot.data?.records?.data || [];
@@ -323,7 +323,7 @@ const SnapshotTable = ({ historyData, selectedDate, timeFilter, strikeCount }) =
             </div>
 
             {finalHistory.map((snapshot, index) => {
-                const timestamp = new Date(snapshot.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                const timestamp = new Date(snapshot.timestamp).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
                 const spotPrice = snapshot.data?.records?.underlyingValue || 0;
 
                 // Determine ATM
