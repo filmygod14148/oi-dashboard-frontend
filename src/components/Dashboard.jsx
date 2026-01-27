@@ -45,7 +45,7 @@ const Dashboard = () => {
                 (latest.timestamp !== previousData.timestamp);
 
             if (isNewData) {
-                console.log('Data updated - changes detected. Fetching full history...');
+                // console.log('Data updated - changes detected. Fetching full history...');
 
                 // 2. Only fetch full history if we have new data
                 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -58,7 +58,7 @@ const Dashboard = () => {
                     setPreviousData(latest);
                 }
             } else {
-                console.log('No changes detected - skipping update');
+                // console.log('No changes detected - skipping update');
             }
         } catch (error) {
             console.error('Error fetching data', error);
