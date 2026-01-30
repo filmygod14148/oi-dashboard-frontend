@@ -10,7 +10,10 @@ const Dashboard = () => {
     const [lastUpdated, setLastUpdated] = useState(null);
     const [liveSpotPrice, setLiveSpotPrice] = useState('N/A'); // Live spot price that updates every 5s
 
-    const [refreshInterval] = useState(5000); // 5 seconds
+    const [apiError, setApiError] = useState(null);
+    const [isRefreshing, setIsRefreshing] = useState(false);
+
+    // UI States (Restored)
     const [timeLeft, setTimeLeft] = useState(5); // Countdown timer
     const [previousData, setPreviousData] = useState(null); // Store previous fetch for comparison
     const [strikeCount, setStrikeCount] = useState(5); // Default 5 strikes
@@ -24,46 +27,102 @@ const Dashboard = () => {
     const [currentTime, setCurrentTime] = useState(new Date()); // Clock state
     const [showClock, setShowClock] = useState(true); // Toggle clock
 
+    const getApiBase = () => {
+        let base = import.meta.env.VITE_API_URL || '';
+        return base.endsWith('/') ? base.slice(0, -1) : base;
+    };
 
     const fetchData = async (isBackground = false) => {
         if (!isBackground) setLoading(true);
+        setApiError(null);
+
         try {
-            // 1. Fetch only latest first to check for changes
-            const API_BASE = import.meta.env.VITE_API_URL || '';
+            const API_BASE = getApiBase();
+            const timestamp = new Date().toLocaleTimeString();
+            console.log(`[${timestamp}] ${isBackground ? 'Background' : 'Manual'} fetch started for ${symbol}...`);
+            console.log(`[${timestamp}] Target URL: ${API_BASE}/api/latest?symbol=${symbol}`);
+
+            // 1. Fetch latest data
             const latestRes = await axios.get(`${API_BASE}/api/latest?symbol=${symbol}`);
             const latest = latestRes.data;
 
             if (!latest) {
+                console.warn(`[${timestamp}] No data returned from API`);
                 if (!isBackground) setLoading(false);
                 return;
             }
 
-            // Check if data has changed (compare with current loaded data)
-            // We use _id comparison if available, or timestamp
+            console.log(`[${timestamp}] Success! Latest data timestamp: ${latest.timestamp}`);
+
+            // Update Spot Price immediately from latest data
+            if (latest?.data?.records?.underlyingValue) {
+                setLiveSpotPrice(latest.data.records.underlyingValue);
+            }
+
+            if (previousData) {
+                console.log(`[${timestamp}] Comparison: ID(${latest._id === previousData._id}) Time(${latest.timestamp === previousData.timestamp})`);
+            }
+
             const isNewData = !previousData ||
                 (latest._id && previousData._id !== latest._id) ||
                 (latest.timestamp !== previousData.timestamp);
 
             if (isNewData) {
-                // console.log('Data updated - changes detected. Fetching full history...');
-
-                // 2. Only fetch full history if we have new data
-                const API_BASE = import.meta.env.VITE_API_URL || '';
+                console.log(`[${timestamp}] New data detected! Fetching full history...`);
                 const histRes = await axios.get(`${API_BASE}/api/history?symbol=${symbol}&limit=all`);
 
-                if (histRes.data.length > 0) {
+                if (histRes.data && histRes.data.length > 0) {
                     setHistory(histRes.data);
                     setCurrentData(latest);
                     setLastUpdated(new Date(latest.timestamp).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" }));
                     setPreviousData(latest);
+                    console.log(`[${timestamp}] History updated: ${histRes.data.length} records`);
                 }
             } else {
-                // console.log('No changes detected - skipping update');
+                console.log(`[${timestamp}] Data is current (no change).`);
+                // Always update currentData from latest to ensure UI is in sync with DB
+                setCurrentData(latest);
+                setLastUpdated(new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" }));
             }
         } catch (error) {
-            console.error('Error fetching data', error);
+            const timestamp = new Date().toLocaleTimeString();
+            console.error(`[${timestamp}] API Error:`, error.message);
+            setApiError(error.message);
         }
         if (!isBackground) setLoading(false);
+    };
+
+    // Manual Refresh Trigger (Calls backend scraper)
+    const handleManualRefresh = async () => {
+        setIsRefreshing(true);
+        setLoading(true);
+        setApiError(null);
+        try {
+            const API_BASE = getApiBase();
+            const timestamp = new Date().toLocaleTimeString();
+            console.log(`[${timestamp}] Triggering backend /api/refresh for ${symbol}...`);
+
+            const [refreshRes] = await axios.all([
+                axios.get(`${API_BASE}/api/refresh?symbol=${symbol}`),
+                // Wait at least 1s for the UI to feel responsive if it returns too fast
+                new Promise(r => setTimeout(r, 1000))
+            ]);
+
+            const refreshStatus = refreshRes.data?.data?.status;
+            if (refreshStatus === 'no_change') {
+                console.log(`[${timestamp}] Backend: NSE data has not updated yet.`);
+            } else {
+                console.log(`[${timestamp}] Backend: New data scraped and saved.`);
+            }
+
+            await fetchData(false); // Fetch the latest state
+        } catch (error) {
+            console.error('Refresh Error:', error.message);
+            setApiError(`Refresh failed: ${error.message}`);
+        } finally {
+            setIsRefreshing(false);
+            setLoading(false);
+        }
     };
 
     // Initial fetch on mount or symbol change
@@ -71,8 +130,7 @@ const Dashboard = () => {
         fetchData(false);
     }, [symbol]);
 
-    // Poll every 5 seconds
-    // Countdown and Auto-Refresh Effect
+    // Poll for latest data (Checking for changes)
     useEffect(() => {
         const timer = setInterval(() => {
             setTimeLeft((prev) => {
@@ -94,30 +152,6 @@ const Dashboard = () => {
         }, 1000);
         return () => clearInterval(timer);
     }, []);
-
-    // Live Spot Price Refresh - Updates every 5 seconds
-    useEffect(() => {
-        const fetchSpotPrice = async () => {
-            try {
-                const API_BASE = import.meta.env.VITE_API_URL || '';
-                const latestRes = await axios.get(`${API_BASE}/api/latest?symbol=${symbol}`);
-                const latest = latestRes.data;
-                if (latest?.data?.records?.underlyingValue) {
-                    setLiveSpotPrice(latest.data.records.underlyingValue);
-                }
-            } catch (error) {
-                console.error('Error fetching spot price', error);
-            }
-        };
-
-        // Fetch immediately on mount
-        fetchSpotPrice();
-
-        // Then fetch every 5 seconds
-        const interval = setInterval(fetchSpotPrice, 5000);
-
-        return () => clearInterval(interval);
-    }, [symbol]);
 
     // Derived values - Always use the latest snapshot for spot price
     const latestSnapshot = history.length > 0 ? history[history.length - 1] : currentData;
@@ -143,18 +177,29 @@ const Dashboard = () => {
             )}
 
             <div className="flex justify-between items-center mb-6">
-                <h1 className="text-3xl font-bold text-gray-800">OI Dashboard</h1>
+                <div>
+                    <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-3">
+                        OI Dashboard
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${apiError ? 'bg-red-100 text-red-800 border-red-200' : 'bg-green-100 text-green-800 border-green-200'}`}>
+                            <span className={`w-2 h-2 mr-1.5 rounded-full ${apiError ? 'bg-red-400' : 'bg-green-400 animate-pulse'}`}></span>
+                            {apiError ? 'Disconnected' : 'Live'}
+                        </span>
+                    </h1>
+                    {apiError && (
+                        <p className="text-red-500 text-xs mt-1 font-mono">Error: {apiError}</p>
+                    )}
+                </div>
                 <div className="flex items-center gap-4">
                     <span className="text-sm text-gray-500 flex flex-col items-end">
-                        <span>Updated: {lastUpdated || 'Never'}</span>
+                        <span className="font-medium">Web: {lastUpdated || 'Never'}</span>
                         {currentData?.data?.nseTimestamp && (
-                            <span className="text-xs text-blue-600 font-semibold">
+                            <span className="text-xs text-blue-600 font-bold bg-blue-50 px-2 py-0.5 rounded mt-1 border border-blue-100">
                                 NSE: {new Date(currentData.data.nseTimestamp).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}
                             </span>
                         )}
                     </span>
 
-                    <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none bg-white px-3 py-2 rounded border shadow-sm hover:bg-gray-50">
+                    <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none bg-white px-3 py-2 rounded border shadow-sm hover:bg-gray-50 transition-colors">
                         <input
                             type="checkbox"
                             checked={showClock}
@@ -167,18 +212,18 @@ const Dashboard = () => {
                     <select
                         value={symbol}
                         onChange={(e) => setSymbol(e.target.value)}
-                        className="p-2 border rounded shadow-sm bg-white"
+                        className="p-2 border rounded shadow-sm bg-white font-semibold focus:ring-2 focus:ring-blue-500 outline-none"
                     >
                         <option value="NIFTY">NIFTY 50</option>
                         <option value="BANKNIFTY">BANKNIFTY</option>
                         <option value="FINNIFTY">FINNIFTY</option>
                     </select>
                     <button
-                        onClick={() => { fetchData(); setTimeLeft(5); }}
-                        disabled={loading}
-                        className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 min-w-[100px]"
+                        onClick={handleManualRefresh}
+                        disabled={loading || isRefreshing}
+                        className={`px-4 py-2 text-white rounded shadow-md transition-all active:scale-95 disabled:opacity-50 min-w-[120px] font-bold ${isRefreshing ? 'bg-orange-500 hover:bg-orange-600' : 'bg-blue-600 hover:bg-blue-700'}`}
                     >
-                        {loading ? 'Refreshing...' : `Refresh (${timeLeft}s)`}
+                        {isRefreshing ? 'Scraping...' : loading ? 'Updating...' : `Refresh (${timeLeft}s)`}
                     </button>
                 </div>
             </div>
